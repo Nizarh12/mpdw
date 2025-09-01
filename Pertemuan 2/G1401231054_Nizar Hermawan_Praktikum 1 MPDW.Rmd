@@ -3,6 +3,9 @@ title: "MPDW Praktikum Pertemuan 1"
 author: "Nizar Hermawan (G1401231054)"
 date: "2025-08-30"
 output: html_document
+editor_options: 
+  markdown: 
+    wrap: sentence
 ---
 
 # Import Data
@@ -26,6 +29,7 @@ datacuaca2
 ```
 
 ## ubah data VPdef menjadi time series
+
 ```{r}
 data.ts <- ts(datacuaca2$VPdef)
 ```
@@ -33,16 +37,21 @@ data.ts <- ts(datacuaca2$VPdef)
 # Ekspolrasi data
 
 ## Ringkasan data
+
 ```{r}
 summary(data.ts)
 ```
+
 ## Plot data time series
+
 ```{r}
 ts.plot(data.ts, xlab="Time Period ", ylab="VPdef", 
         main = "Time Series Plot VPdef")
 points(data.ts)
 ```
+
 # sma
+
 ```{r}
 # Hitung jumlah baris data
 n <- nrow(datacuaca2)
@@ -77,6 +86,7 @@ points(test_ma.ts)
 data.sma<-SMA(train_ma.ts, n=4)
 data.sma
 ```
+
 Data pemulusan pada periode ke-t selanjutnya digunakan sebagai nilai peramalan pada periode ke t+1 sehingga hasil peramalan 1 periode kedepan adalah sebagai berikut.
 
 ```{r}
@@ -114,6 +124,7 @@ row.names(akurasi_train.sma)<- c("SSE", "MSE", "MAPE")
 colnames(akurasi_train.sma) <- c("Akurasi m = 4")
 akurasi_train.sma
 ```
+
 ```{r}
 # Ambil data aktual (baris 81-104, kolom 1)
 actual_test <- data.gab[81:104, 1]
@@ -136,12 +147,14 @@ colnames(akurasi_test.sma) <- c("Akurasi m = 4")
 
 akurasi_test.sma
 ```
+
 ## interpretasi sma
-Training: MAPE 6.98% → cukup bagus
-Testing: MAPE melonjak jadi 30.93% → prediksi buruk, model kurang adaptif terhadap tren dan fluktuasi.
+
+Training: MAPE 6.98% → cukup bagus Testing: MAPE melonjak jadi 30.93% → prediksi buruk, model kurang adaptif terhadap tren dan fluktuasi.
 Kesimpulan: Kurang cocok untuk data 10-menitan yang fluktuatif/trending.
 
 # dma
+
 ```{r}
 dma <- SMA(data.sma, n = 4)
 At <- 2*data.sma - dma
@@ -164,6 +177,7 @@ data.gab2 <- cbind(aktual = c(data.ts),
                    ramalan = c(data.ramal, f[-1]))
 data.gab2
 ```
+
 ```{r}
 ts.plot(data.ts, xlab="Time Period ", ylab="Sales", main= "DMA N=4 Data Sales")
 points(data.ts)
@@ -172,6 +186,7 @@ lines(data.gab2[,6],col="red",lwd=2)
 legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.8)
 
 ```
+
 ```{r}
 #Menghitung nilai keakuratan data latih
 error_train.dma = train_ma.ts-data.ramal[1:length(train_ma.ts)]
@@ -185,6 +200,7 @@ row.names(akurasi_train.dma)<- c("SSE", "MSE", "MAPE")
 colnames(akurasi_train.dma) <- c("Akurasi m = 4")
 akurasi_train.dma
 ```
+
 ```{r}
 n_test <- length(test_ma.ts)        # misal 24
 error_test.dma <- test_ma.ts - data.gab2[(nrow(data.gab2)-n_test+1):nrow(data.gab2), 6]
@@ -199,12 +215,14 @@ colnames(akurasi_test.dma) <- c("Akurasi m = 4")
 akurasi_test.dma
 
 ```
+
 ## interpretasi dma
+
 Training: MAPE 6.25%, SSE lebih rendah dari SMA.
-Testing: MAPE 9.78% → masih lebih baik dari SMA, tapi belum optimal, karena mendekati 10%
-Kesimpulan: Lebih responsif dari SMA, tapi belum cukup untuk data dengan tren/jumlah fluktuasi tinggi.
+Testing: MAPE 9.78% → masih lebih baik dari SMA, tapi belum optimal, karena mendekati 10% Kesimpulan: Lebih responsif dari SMA, tapi belum cukup untuk data dengan tren/jumlah fluktuasi tinggi.
 
 # ses
+
 ```{r}
 # Ubah ke time series
 train_ma.ts <- ts(training_ma$VPdef)
@@ -215,11 +233,13 @@ ses.1 <- ses(train_ma.ts, h = 10, alpha = 0.2)
 plot(ses.1)
 ses.1
 ```
+
 ```{r}
 ses.2<- ses(train_ma.ts, h = 10, alpha = 0.7)
 plot(ses.2)
 ses.2
 ```
+
 ```{r}
 autoplot(ses.1) +
   autolayer(fitted(ses.1), series="Fitted") +
@@ -242,6 +262,7 @@ plot(ses2)
 ramalan2<- forecast(ses2, h=10)
 ramalan2
 ```
+
 ```{r}
 #SES
 ses.opt <- ses(train_ma.ts, h = 10, alpha = NULL)
@@ -282,6 +303,7 @@ row.names(akurasi2)<- c("SSE", "MSE", "RMSE")
 colnames(akurasi2) <- c("Akurasi lamda=0.7")
 akurasi2
 ```
+
 ```{r}
 # Error masing-masing ramalan
 e1   <- as.numeric(ramalan1$mean) - as.numeric(testing_ma$VPdef)
@@ -314,22 +336,21 @@ hasil_test
 ```
 
 ## interpretasi ses
-Training
-SES λ=0.2 → SSE = 3.35, RMSE = 0.205 → error relatif besar, model lambat mengikuti perubahan.
+
+Training SES λ=0.2 → SSE = 3.35, RMSE = 0.205 → error relatif besar, model lambat mengikuti perubahan.
 SES λ=0.7 → SSE = 0.826, RMSE = 0.102 → jauh lebih baik, model lebih responsif.
 Kesimpulan: Pada data latih, λ besar lebih unggul → model cepat menyesuaikan diri terhadap pola data.
 
-Testing
-SES α=0.2 → RMSE = 0.266 → performa turun (over-smooth).
+Testing SES α=0.2 → RMSE = 0.266 → performa turun (over-smooth).
 SES α=0.7 → RMSE = 0.229 → masih lebih baik, konsisten dari training.
 SES Optimal → RMSE = 0.235 → mirip dengan α=0.7, membuktikan data cocok dengan smoothing yang responsif.
 Kesimpulan: Pada data uji, α besar (0.7) tetap memberikan hasil terbaik, walau error sedikit lebih tinggi dibanding data training → artinya model cukup stabil
 
-Overall
-SES dengan α kecil kurang cocok untuk data 10-menitan yang fluktuatif.
+Overall SES dengan α kecil kurang cocok untuk data 10-menitan yang fluktuatif.
 SES dengan α tinggi (0.7) atau optimal lebih sesuai, karena lebih mampu menangkap pola jangka pendek.
 
 # des
+
 ```{r}
 #Lamda=0.2 dan gamma=0.2
 des.1<- HoltWinters(train_ma.ts, gamma = FALSE, beta = 0.2, alpha = 0.2)
@@ -347,11 +368,13 @@ plot(des.2)
 ramalandes2<- forecast(des.2, h=10)
 ramalandes2
 ```
+
 ```{r}
 plot(data.ts)
 lines(des.1$fitted[,1], lty=2, col="blue")
 lines(ramalandes1$mean, col="red")
 ```
+
 ```{r}
 #Lamda dan gamma optimum
 des.opt<- HoltWinters(train_ma.ts, gamma = FALSE)
@@ -362,6 +385,7 @@ plot(des.opt)
 ramalandesopt<- forecast(des.opt, h=10)
 ramalandesopt
 ```
+
 ```{r}
 #Akurasi Data Training
 ssedes.train1<-des.1$SSE
@@ -390,6 +414,7 @@ row.names(akurasides.2)<- c("SSE", "MSE", "MAPE")
 colnames(akurasides.2) <- c("Akurasi lamda=0.6 dan gamma=0.3")
 akurasides.2
 ```
+
 ```{r}
 train_ma.ts <- ts(train_ma.ts, frequency = 6)
 test_ma.ts  <- ts(test_ma.ts, frequency = 6, start = end(train_ma.ts) + c(0,1))  
@@ -437,25 +462,19 @@ row.names(akurasi_des2_test) <- c("SSE", "MSE", "MAPE")
 colnames(akurasi_des2_test) <- c("Akurasi DES2 (lamda=0.6, gamma=0.3)")
 akurasi_des2_test
 ```
+
 ### interpretasi des
-Training:
-DES1 (λ=0.2, γ=0.2) → SSE = 4.17, MSE = 0.052, MAPE = 11.27% → error masih cukup tinggi, model terlalu lambat mengikuti tren.
+
+Training: DES1 (λ=0.2, γ=0.2) → SSE = 4.17, MSE = 0.052, MAPE = 11.27% → error masih cukup tinggi, model terlalu lambat mengikuti tren.
 DES2 (λ=0.6, γ=0.3) → SSE = 0.94, MSE = 0.0117, MAPE = 4.91% → jauh lebih baik, error rendah, model lebih adaptif.
 esimpulan: Pada data latih, kombinasi λ besar + γ sedang (DES2) jauh lebih akurat dibanding DES1.
 
-Testing:
-DES1 → SSE = 0.189, MSE = 0.00946, MAPE = 4.36% → performa cukup baik.
+Testing: DES1 → SSE = 0.189, MSE = 0.00946, MAPE = 4.36% → performa cukup baik.
 DES2 → SSE = 0.203, MSE = 0.0101, MAPE = 4.15% → sedikit lebih baik dari DES1 (MAPE lebih rendah).
 esimpulan: Pada data uji, DES2 tetap unggul, meskipun selisih dengan DES1 tipis.
 
 # Kesimpulan
+
 DES2 (λ=0.6, γ=0.3) memberikan performa terbaik secara konsisten baik di training maupun testing.
 Model ini paling mampu menangani level + tren pada data 10-menitan.
 Perbedaan tipis di data uji menunjukkan model stabil dan generalisasi baik, bukan hanya cocok di data latih.
-
-
-
-
-
-
-
