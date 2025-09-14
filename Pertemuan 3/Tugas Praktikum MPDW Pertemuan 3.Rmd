@@ -1,0 +1,265 @@
+---
+title: "Pertemuan 3"
+author: "Nizar Hermawan (G1401231054)"
+date: "2025-09-09"
+output: html_document
+---
+
+```{r}
+library(dLagM)
+library(dynlm)
+library(MLmetrics)
+library(lmtest)
+library(car)
+```
+
+# Input Data
+```{r} 
+aqi = read.csv("NewDelhi_Air_quality.csv")
+str (aqi)
+aqi
+```
+
+# Eksplorasi Data Untuk Memilih X yang mempengaruhi Y (AQI)
+## Korelasi Pearson dari semua peubah
+```{r}
+cor_matrix= cor(aqi[, c("AQI","CO","no2","o3","pm10","pm25","so2")], use="complete.obs", method="pearson")
+print(cor_matrix)
+```
+buat korelasi
+```{r}
+library(corrplot)
+corrplot(cor_matrix, method="color", addCoef.col="black", tl.col="black")
+```
+
+## Scatterplot antara aqi dengan peubah lainnya
+```{r}
+library(ggplot2)
+library(reshape2)
+
+# ubah data ke format long
+data_long <- melt(aqi, id.vars = "AQI", measure.vars = c("CO","no2","o3","pm10","pm25","so2"))
+
+# scatter plot AQI vs tiap polutan
+ggplot(data_long, aes(x = value, y = AQI)) +
+  geom_point(alpha = 0.5, color = "blue") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  facet_wrap(~variable, scales = "free_x") +
+  labs(title = "Scatter Plot AQI dengan Setiap Polutan",
+       x = "Konsentrasi Polutan",
+       y = "AQI")
+
+```
+
+Dari sini, dapat dilihat bahwa peubah yang memiliki korelasi paling kuat dengan AQI adalah 03 dengan r square (0.97359901). Oleh karena itu, kita akan menggunakan peubah ini sebagai prediktor dalam model regresi.Dan juga dalam beberapa jurnal (Effects of Ambient O3 on Respiratory Mortality, Especially the Combined Effects of PM2.5 and O3) yang saya baca, O3 adalah salah satu polutan yang sangat berpengaruh terhadap kualitas udara.
+
+# Pembagian Data
+```{r}
+d_aqi= aqi[, c("AQI", "o3")]
+head(d_aqi)
+```
+
+```{r}
+#bagi data
+tr = d_aqi[1:58,]
+ts = d_aqi[59:72,]
+
+nrow(tr)
+nrow(ts)
+```
+```{r}
+tr.ts=ts(tr)
+ts.ts=ts(ts)
+dt.ts=ts(d_aqi)
+```
+
+# Model Koyck
+## Pemodelan
+```{r}
+koyck <- koyckDlm(x = tr$o3, y = tr$AQI)
+summary(koyck)
+```
+Interpretasi Hasil:
+
+Dari summary, kita dapatkan model:
+
+$$ \hat{Y_t}=0.26260+0.25823X_t+0.42943Y_{t-1} $$
+
+Koefisien $X_t$ (0.25823) signifikan, artinya nilai $X$ saat ini berpengaruh terhadap $Y$.
+
+Koefisien $Y_{t−1}$ (0.42943) juga signifikan. Ini adalah estimasi untuk $\lambda$. Nilai ini menunjukkan bahwa sekitar 42% dari efek di periode sebelumnya masih "terbawa" ke periode saat ini.
+
+## Peramalan dan Akurasi
+```{r}
+f.koyck <- forecast(model = koyck, x=ts$o3, h=14)
+f.koyck
+mapekoyck <- MAPE(f.koyck$forecasts, ts$AQI)
+mapekoyck #data test
+#akurasi data training
+GoF(koyck)
+```
+
+# Distributed Lag
+## Pemodelan
+```{r}
+model.dlm <- dlm(y = tr$AQI, x = tr$o3, q = 3)
+summary(model.dlm)
+AIC(model.dlm)
+BIC(model.dlm)
+```
+Dari hasil diatas, didapat bahwa $P-value$ dari intercept dan $x_{t-1}<0.05$. Hal ini menunjukkan bahwa intercept dan $x_{t-1}$ berpengaruh signifikan terhadap $y$. Adapun model keseluruhan yang terbentuk adalah sebagai berikut
+
+$$
+\hat{Y_t}=-0.55029+0.47549X_t+0.03845X_{t-1}-0.07281X_{t-2}+0.02903X_{t-3}
+$$
+## Peramalan dan Akurasi
+```{r}
+fore.dlm <- forecast(model = model.dlm, x=ts$o3, h=14)
+fore.dlm
+mapedlm <- MAPE(fore.dlm$forecasts, ts$AQI)
+mapedlm #data test
+
+GoF(model.dlm) #data training
+```
+## Lag Optimum
+```{r}
+finiteDLMauto(formula = AQI ~ o3,
+              data = data.frame(tr), q.min = 1, q.max = 10,
+              model.type = "dlm", error.type = "AIC", trace = TRUE)
+```
+berdasarkan AIC yang paling terkecil adalah Lag 10 maka saya akan menggunakan lag 10 untuk model DLM
+```{r}
+model.dlm10 <- dlm(y = tr$AQI, x = tr$o3, q = 10)
+summary(model.dlm10)
+AIC(model.dlm10)
+BIC(model.dlm10)
+```
+Dari hasil tersebut terdapat beberapa peubah yang berpengaruh signifikan terhadap taraf nyata 5% yaitu $x_t$ , $x_{t-7}$ , $x_{t-8}$ , $x_{t-9}$. Adapun keseluruhan model yang terbentuk adalah
+
+$$
+\hat{Y_t}=-0.64267+0.42814X_t+...-0.09537_{t-10}
+$$
+Adapun hasil peramalan 14 periode kedepan menggunakan model tersebut adalah sebagai berikut
+```{r}
+fore.dlm10 <- forecast(model = model.dlm10, x=ts$o3, h=14)
+fore.dlm10
+mapedlm10 <- MAPE(fore.dlm10$forecasts, ts$AQI)
+mapedlm10 #data test
+GoF(model.dlm10) #data training
+```
+Model tersebut merupakan model yang sangat baik dengan nilai MAPE yang kurang dari 10%.
+
+# Model Autoregressive
+
+## Pemodelan
+```{r}
+model.ardl <- ardlDlm(x = tr$o3, y = tr$AQI, p = 1 , q = 1)
+summary(model.ardl)
+AIC(model.ardl)
+BIC(model.ardl)
+```
+Hasil di atas menunjukkan bahwa selain peubah $x_{t-1}$, hasil uji t menunjukkan nilai-p pada peubah $\ge0.05$ Hal ini menunjukkan bahwa peubah $x_{t-1}$ berpengaruh signifikan terhadap $y_t$, sementara $x_t$ dan $y_{t-1}$ berpengaruh signifikan terhadap $y_t$. Model keseluruhannya adalah sebagai berikut:
+
+$$
+\hat{Y}=-0.24530+0.48660X_t-0.23184X_{t-1}+0.45632Y_{t-1}
+$$
+## Peramalan dan Akurasi
+```{r}
+model.ardl<- ardlDlm(AQI ~ o3, data = aqi, p = 1, q = 1)
+
+# Data O3 14 observasi data kedepan
+x_future <- ts$o3[1:14]
+
+# Forecast AQI ke depan
+fore_ardl <- dLagM::forecast(model.ardl, x = x_future, h = 14)
+
+# Lihat hasil
+print(fore_ardl)
+```
+```{r}
+mape.ardl <- MAPE(fore_ardl$forecasts, ts$AQI)
+mape.ardl
+
+GoF(model.ardl)
+```
+## Lag Optimum
+```{r}
+model.ardl.opt <- ardlBoundOrders(data = data.frame(aqi), ic = "AIC", 
+                                  formula = AQI ~ o3 )
+model.ardl.opt
+```
+```{r}
+min_p=c()
+for(i in 1:6){
+  min_p[i]=min(model.ardl.opt$Stat.table[[i]])
+}
+q_opt=which(min_p==min(min_p, na.rm = TRUE))
+p_opt=which(model.ardl.opt$Stat.table[[q_opt]] == 
+              min(model.ardl.opt$Stat.table[[q_opt]], na.rm = TRUE))
+data.frame("q_optimum" = q_opt, "p_optimum" = p_opt, 
+           "AIC"=model.ardl.opt$min.Stat)
+```
+
+
+```{r}
+model.ardl2 <- ardlDlm(formula = AQI ~ o3, 
+                         data = tr,p = 13, q = 2)
+summary(model.ardl2)
+```
+```{r}
+AIC(model.ardl2)
+```
+Dari tabel di atas, dapat terlihat bahwa nilai AIC terendah didapat ketika $p=13$ dan $q=2$, yaitu sebesar 29.42385. Artinya, model autoregressive optimum didapat ketika $p=13$ dan $q=2$.
+
+Selanjutnya dapat dilakukan pemodelan dengan nilai $p$ dan $q$ optimum seperti inisialisasi di langkah sebelumnya.
+
+
+# Pemodelan DLM & ARDL dengan Library dynlm
+```{r}
+#dengan model dlm q=10
+conslm1 <- dynlm(AQI ~ o3 + L(o3, 1:10), data = tr.ts)
+#dengan model ardl p=13 q=2
+conslm2 <- dynlm(AQI ~ L(AQI, 1:13) + L(o3, 0:2), data = tr.ts)
+```
+
+## Ringkasan Model
+```{r}
+summary(conslm1)
+summary(conslm2)
+```
+
+## SSE
+```{r}
+deviance(conslm1)
+deviance(conslm2)
+```
+## Autokorelasi
+```{r}
+dwtest(conslm1)
+dwtest(conslm2)
+
+```
+
+## Heterogenitas
+```{r}
+bptest(conslm1)
+bptest(conslm2)
+```
+
+## Kenormalan
+```{r}
+shapiro.test(residuals(conslm1))
+shapiro.test(residuals(conslm2))
+```
+
+
+# Perbandingan Model
+```{r}
+akurasi = matrix(c(mapekoyck, mapedlm, mapedlm10, mape.ardl))
+row.names(akurasi) = c("Koyck","DLM 1","DLM 2","Autoregressive")
+colnames(akurasi) = c("MAPE")
+akurasi
+```
+Berdasarkan nilai MAPE, model paling optimum didapat pada Model DLM 1 karena memiliki nilai MAPE yang terkecil.sehingga dapat disimpulkan model terbaik dalam hal ini adalah Model DLM 1
+
+
