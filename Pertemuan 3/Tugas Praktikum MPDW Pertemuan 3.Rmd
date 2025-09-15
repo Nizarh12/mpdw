@@ -260,6 +260,6 @@ row.names(akurasi) = c("Koyck","DLM 1","DLM 2","Autoregressive")
 colnames(akurasi) = c("MAPE")
 akurasi
 ```
-Berdasarkan nilai MAPE, model paling optimum didapat pada Model DLM 1 karena memiliki nilai MAPE yang terkecil.sehingga dapat disimpulkan model terbaik dalam hal ini adalah Model DLM 1
+Berdasarkan nilai MAPE, model paling optimum didapat pada Model ARDL karena memiliki nilai MAPE yang terkecil.sehingga dapat disimpulkan model terbaik dalam hal ini adalah Model ARDL
 
 
