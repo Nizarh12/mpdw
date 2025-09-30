@@ -1,0 +1,202 @@
+---
+title: "Tugas Praktikum Pertemuan 5"
+author: "Nizar Hermawan (G1401231054)"
+date: "2025-09-25"
+output: html_document
+---
+
+# Library
+```{r}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+```
+
+# Import Data
+```{r}
+datacuaca <- read.csv("C:/Users/Nizar/Downloads/Documents/Data Cuaca Kelompok 2 MPDW.csv")
+datacuaca2 <- datacuaca[301:400, c("date", "VPdef")]
+datacuaca2
+```
+
+# Ubah jadi data TS
+```{r}
+data.ts <- ts(datacuaca2$VPdef)
+```
+
+# Plot Data TS
+```{r}
+ts.plot(data.ts, xlab="Time Period ", ylab="VPdef", 
+        main = "Time Series Plot VPdef")
+points(data.ts)
+```
+
+# Plot ACF
+```{r}
+acf(data.ts, main="ACF VPdef")
+```
+# Uji ADF
+```{r}
+adf.test(data.ts)
+```
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.5868 yang lebih besar dari taraf nyata 5% dan menandakan bahwa data tidak stasioner dalam rataan. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF
+
+# Plot Box-Cox
+```{r}
+index = seq(301:400)
+b = boxcox(data.ts~index, lambda = seq(-1,4,by=1))
+#Nilai Rounded Lambda
+lambda = b$x[which.max(b$y)]
+lambda
+#SK
+b$x[b$y > max(b$y) - 1/2 * qchisq(.95,1)]
+```
+Berdasarkan plot Box-Cox, diperoleh nilai rounded value ($\lambda$) optimum sebesar -0.85 dengan selang kepercayaan 95% yaitu (-1.00, -0.39). Karena selang tersebut tidak memuat nilai satu, maka dapat disimpulkan bahwa data belum stasioner dalam ragam sehingga perlu dilakukan transformasi Box-Cox dengan $\lambda = -0.85$.
+
+## Partisi data
+
+### Data Train
+```{r}
+data.ts1 <- data.ts[1:80] |> ts()
+mean(data.ts1)
+var(data.ts1)
+```
+
+#### Plot Time Series Data Train
+```{r}
+data.ts1 |> as_tsibble() |> 
+  ggplot(aes(x = index, y = value)) +
+  geom_line()+theme_bw() +
+  xlab("Obs") + ylab("Nilai")
+```
+
+#### Plot ACF Data Train
+```{r}
+acf(data.ts1, main="ACF postrend1")
+```
+
+#### Uji ADF Data Train
+```{r}
+adf.test(data.ts1)
+```
+
+#### Plot Box-Cox Data Train
+```{r}
+index1 = seq(1:80)
+b1 = boxcox(data.ts1~index1, lambda = seq(-1,4,by=1))
+#Nilai Rounded Lambda
+lambda1 = b1$x[which.max(b1$y)]
+lambda1
+#SK
+b1$x[b1$y > max(b1$y) - 1/2 * qchisq(.95,1)]
+```
+
+### Data Test
+```{r}
+data.ts2 <- data.ts[81:100] |> ts()
+mean(data.ts2)
+var(data.ts2)
+```
+
+#### Plot Time Series Data Test
+```{r}
+data.ts2 |> as_tsibble() |> 
+  ggplot(aes(x = index, y = value)) +
+  geom_line()+theme_bw() +
+  xlab("Obs") + ylab("Nilai")
+```
+
+#### Plot ACF Data Test
+```{r}
+acf(data.ts2, main="ACF postrend2")
+```
+
+#### Uji ADF Data Test
+```{r}
+adf.test(data.ts2)
+```
+
+#### Plot Box-Cox Data Test
+```{r}
+index2 = seq(81:100)
+b2 = boxcox(data.ts2~index2, lambda = seq(-1,4,by=1))
+#Nilai Rounded Lambda
+lambda2 = b2$x[which.max(b2$y)]
+lambda2
+#SK
+b2$x[b2$y > max(b2$y) - 1/2 * qchisq(.95,1)]
+```
+
+# Penanganan
+## Transformasi Box-Cox
+```{r}
+library(forecast)
+
+# Transformasi Box-Cox dengan lambda = -0.85
+data.bc <- BoxCox(data.ts, lambda = -0.85)
+
+# Plot hasil transformasi
+ts.plot(data.bc, xlab = "Time Period", ylab = "Transformed VPdef",
+        main = "Box-Cox Transformed VPdef")
+points(data.bc)
+
+```
+## Plot Setelah Transformasi Box-Cox
+```{r}
+#### Plot Setelah Transformasi
+# Buat index waktu
+index <- seq_along(data.bc)
+
+# Tambahkan konstanta biar semua nilai positif
+data.bc.pos <- data.bc - min(data.bc) + 1
+
+# Model regresi dummy
+model_bc <- lm(data.bc.pos ~ index)
+
+# Plot Box-Cox
+b <- boxcox(model_bc, lambda = seq(-1, 4, by = 0.1))
+
+# Nilai lambda optimum
+lambda_bc <- b$x[which.max(b$y)]
+lambda_bc
+
+# Selang kepercayaan 95%
+b$x[b$y > max(b$y) - 1/2 * qchisq(.95,1)]
+
+```
+
+Karena selang ini memuat nilai 1, maka bisa dikatakan bahwa data hasil transformasi Box-Cox sudah stasioner dalam ragam
+
+## Diferensiasi
+```{r}
+# Diferensiasi orde 1
+data.diff1 <- diff(data.bc, differences = 1)
+# Plot hasil diferensiasi
+ts.plot(data.diff1, xlab = "Time Period", ylab = "Differenced VPdef",
+        main = "First Order Differenced VPdef")
+points(data.diff1)
+```
+
+## Plot ACF hasil diferensiasi
+```{r}
+acf(data.diff1, main = "ACF of First Order Differenced VPdef")
+```
+Setelah dilakukan differencing, pola ACF sudah terlihat cut-off) dan sebagian besar lag berada dalam batas kepercayaan. Ini menandakan tren sudah teratasi.
+
+## Uji ADF hasil diferensiasi
+```{r}
+adf.test(data.diff1)
+```
+$H_0$ : Data tidak stasioner dalam rataan
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.01 yang lebih kecil dari taraf nyata 5% dan menandakan bahwa data stasioner dalam rataan. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF
+
+# Kesimpulan
+Berdasarkan hasil analisis, dapat disimpulkan bahwa data VPdef awalnya tidak stasioner dalam rataan dan ragam. Setelah dilakukan transformasi Box-Cox dengan λ = -0.85, data menjadi stasioner dalam ragam. Selanjutnya, dengan melakukan diferensiasi 1 kali, data menjadi stasioner dalam rataan. Hal ini didukung oleh hasil uji ADF yang menunjukkan p-value < 0.05 setelah diferensiasi, serta pola ACF yang menunjukkan cut-off setelah diferensiasi.
+
